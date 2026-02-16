@@ -74,11 +74,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/luisoala/clawly"
-Documentation = "https://github.com/luisoala/clawly#readme"
-Repository = "https://github.com/luisoala/clawly.git"
-Issues = "https://github.com/luisoala/clawly/issues"
-Changelog = "https://github.com/luisoala/clawly/releases"
+Homepage = "https://github.com/suislanchez/clawly"
+Documentation = "https://github.com/suislanchez/clawly#readme"
+Repository = "https://github.com/suislanchez/clawly.git"
+Issues = "https://github.com/suislanchez/clawly/issues"
+Changelog = "https://github.com/suislanchez/clawly/releases"
 
 [project.scripts]
 clawly = "clawly.main:main"

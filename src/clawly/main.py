@@ -166,7 +166,7 @@ def run():
     print(f"[cyan]█▀▀░█░░░█▀█░█░█░█░░░█░█[/]  v{version('clawly')}")
     print("[cyan]█░░░█░░░█▀█░█▄█░█░░░░█░[/]")
     print(
-        "[cyan]▀▀▀░▀▀▀░▀░▀░▀░▀░▀▀▀░░▀░[/]  [blue underline]https://github.com/luisoala/clawly[/]"
+        "[cyan]▀▀▀░▀▀▀░▀░▀░▀░▀░▀▀▀░░▀░[/]  [blue underline]https://github.com/suislanchez/clawly[/]"
     )
     print()
 
