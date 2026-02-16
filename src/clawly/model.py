@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2025-2026  Philipp Emanuel Weidmann <pew@worldwidemann.com> + contributors
 
+"""Model loading, inference, and directional ablation (abliteration).
+
+Provides the :class:`Model` wrapper that handles dtype fallback loading,
+batched residual extraction, LoRA-based abliteration, and merged model export.
+Supports both single-direction and multi-category abliteration via SVD.
+"""
+
 import math
 from contextlib import suppress
 from dataclasses import dataclass
@@ -170,7 +177,10 @@ class Model:
             comp.split(".")[-1] for comp in self.get_abliterable_components()
         ]
 
-        if self.settings.row_normalization != RowNormalization.FULL:
+        if self.settings.category_preset is not None:
+            # Multi-category mode: SVD decomposition needs higher rank.
+            lora_rank = self.settings.category_lora_rank
+        elif self.settings.row_normalization != RowNormalization.FULL:
             # Rank 1 is sufficient for directional ablation without renormalization.
             lora_rank = 1
         else:
@@ -381,21 +391,32 @@ class Model:
         refusal_directions: Tensor,
         direction_index: float | None,
         parameters: dict[str, AbliterationParameters],
+        category_directions: list[Tensor] | None = None,
+        category_weights: list[float] | None = None,
     ):
-        if direction_index is None:
-            refusal_direction = None
-        else:
-            # The index must be shifted by 1 because the first element
-            # of refusal_directions is the direction for the embeddings.
-            weight, index = math.modf(direction_index + 1)
-            refusal_direction = F.normalize(
-                refusal_directions[int(index)].lerp(
-                    refusal_directions[int(index) + 1],
-                    weight,
-                ),
-                p=2,
-                dim=0,
-            )
+        # Multi-category mode: accumulate weighted delta W from multiple directions
+        use_categories = (
+            category_directions is not None
+            and category_weights is not None
+            and len(category_directions) > 0
+        )
+
+        if not use_categories:
+            # Single-direction mode (original behavior)
+            if direction_index is None:
+                refusal_direction = None
+            else:
+                # The index must be shifted by 1 because the first element
+                # of refusal_directions is the direction for the embeddings.
+                weight, index = math.modf(direction_index + 1)
+                refusal_direction = F.normalize(
+                    refusal_directions[int(index)].lerp(
+                        refusal_directions[int(index) + 1],
+                        weight,
+                    ),
+                    p=2,
+                    dim=0,
+                )
 
         # Note that some implementations of abliteration also orthogonalize
         # the embedding matrix, but it's unclear if that has any benefits.
@@ -413,16 +434,9 @@ class Model:
 
                 # Interpolate linearly between max_weight and min_weight
                 # over min_weight_distance.
-                weight = params.max_weight + (distance / params.min_weight_distance) * (
+                abliteration_weight = params.max_weight + (distance / params.min_weight_distance) * (
                     params.min_weight - params.max_weight
                 )
-
-                if refusal_direction is None:
-                    # The index must be shifted by 1 because the first element
-                    # of refusal_directions is the direction for the embeddings.
-                    layer_refusal_direction = refusal_directions[layer_index + 1]
-                else:
-                    layer_refusal_direction = refusal_direction
 
                 for module in modules:
                     # FIXME: This cast is potentially invalid, because the program logic
@@ -433,14 +447,6 @@ class Model:
                     #        different model configurations, and PEFT employs different
                     #        module types depending on the chosen quantization.
                     module = cast(Linear, module)
-
-                    # LoRA abliteration: delta W = -lambda * v * (v^T W)
-                    # lora_B = -lambda * v
-                    # lora_A = v^T W
-
-                    # Use the FP32 refusal direction directly (no downcast/upcast)
-                    # and move to the correct device.
-                    v = layer_refusal_direction.to(module.weight.device)
 
                     # Get W (dequantize if necessary).
                     #
@@ -475,41 +481,94 @@ class Model:
                         # Normalize the weight matrix along the rows.
                         W = F.normalize(W, p=2, dim=1)
 
-                    # Calculate lora_A = v^T W
-                    # v is (d_out,), W is (d_out, d_in)
-                    # v @ W -> (d_in,)
-                    lora_A = (v @ W).view(1, -1)
+                    if use_categories:
+                        # Multi-category: accumulate delta_W = sum_i(-lambda * cat_weight_i * v_i * (v_i^T @ W))
+                        delta_W = torch.zeros_like(W)
+                        for cat_dirs, cat_weight in zip(category_directions, category_weights):
+                            if cat_weight == 0.0:
+                                continue
 
-                    # Calculate lora_B = -weight * v
-                    # v is (d_out,)
-                    lora_B = (-weight * v).view(-1, 1)
+                            if direction_index is None:
+                                v_cat = cat_dirs[layer_index + 1]
+                            else:
+                                w_frac, idx = math.modf(direction_index + 1)
+                                v_cat = F.normalize(
+                                    cat_dirs[int(idx)].lerp(cat_dirs[int(idx) + 1], w_frac),
+                                    p=2, dim=0,
+                                )
 
-                    if self.settings.row_normalization == RowNormalization.PRE:
-                        # Make the LoRA adapter apply to the original weight matrix.
-                        lora_B = W_row_norms * lora_B
-                    elif self.settings.row_normalization == RowNormalization.FULL:
-                        # Approximates https://huggingface.co/blog/grimjim/norm-preserving-biprojected-abliteration
-                        W = W + lora_B @ lora_A
-                        # Normalize the adjusted weight matrix along the rows.
-                        W = F.normalize(W, p=2, dim=1)
-                        # Restore the original row norms of the weight matrix.
-                        W = W * W_row_norms
-                        # Subtract the original matrix to turn W into a delta.
-                        W = W - W_org
-                        # Use a low-rank SVD to get an approximation of the matrix.
+                            v_cat = v_cat.to(module.weight.device)
+                            # delta_W += -lambda * cat_weight * v * (v^T @ W)
+                            delta_W += -abliteration_weight * cat_weight * v_cat.unsqueeze(1) * (v_cat @ W).unsqueeze(0)
+
+                        if self.settings.row_normalization == RowNormalization.PRE:
+                            delta_W = W_row_norms * delta_W
+                        elif self.settings.row_normalization == RowNormalization.FULL:
+                            W_adj = W + delta_W
+                            W_adj = F.normalize(W_adj, p=2, dim=1) * W_row_norms
+                            delta_W = W_adj - W_org
+
+                        # SVD decompose the accumulated delta into LoRA A/B
                         r = self.peft_config.r
-                        U, S, Vh = torch.svd_lowrank(W, q=2 * r + 4, niter=6)
-                        # Truncate it to the part we want to store in the LoRA adapter.
-                        # Note: svd_lowrank actually returns V, so transpose it to get Vh.
+                        U, S, Vh = torch.svd_lowrank(delta_W, q=2 * r + 4, niter=6)
                         U = U[:, :r]
                         S = S[:r]
                         Vh = Vh[:, :r].T
-                        # Transfer it into the LoRA adapter components. Split the singular values
-                        # evenly between the two components to keep their norms balanced and avoid
-                        # potential issues with numerical stability.
                         sqrt_S = torch.sqrt(S)
                         lora_B = U @ torch.diag(sqrt_S)
                         lora_A = torch.diag(sqrt_S) @ Vh
+                    else:
+                        # Single-direction mode (original behavior)
+                        # LoRA abliteration: delta W = -lambda * v * (v^T W)
+                        # lora_B = -lambda * v
+                        # lora_A = v^T W
+
+                        if refusal_direction is None:
+                            # The index must be shifted by 1 because the first element
+                            # of refusal_directions is the direction for the embeddings.
+                            layer_refusal_direction = refusal_directions[layer_index + 1]
+                        else:
+                            layer_refusal_direction = refusal_direction
+
+                        # Use the FP32 refusal direction directly (no downcast/upcast)
+                        # and move to the correct device.
+                        v = layer_refusal_direction.to(module.weight.device)
+
+                        # Calculate lora_A = v^T W
+                        # v is (d_out,), W is (d_out, d_in)
+                        # v @ W -> (d_in,)
+                        lora_A = (v @ W).view(1, -1)
+
+                        # Calculate lora_B = -weight * v
+                        # v is (d_out,)
+                        lora_B = (-abliteration_weight * v).view(-1, 1)
+
+                        if self.settings.row_normalization == RowNormalization.PRE:
+                            # Make the LoRA adapter apply to the original weight matrix.
+                            lora_B = W_row_norms * lora_B
+                        elif self.settings.row_normalization == RowNormalization.FULL:
+                            # Approximates https://huggingface.co/blog/grimjim/norm-preserving-biprojected-abliteration
+                            W = W + lora_B @ lora_A
+                            # Normalize the adjusted weight matrix along the rows.
+                            W = F.normalize(W, p=2, dim=1)
+                            # Restore the original row norms of the weight matrix.
+                            W = W * W_row_norms
+                            # Subtract the original matrix to turn W into a delta.
+                            W = W - W_org
+                            # Use a low-rank SVD to get an approximation of the matrix.
+                            r = self.peft_config.r
+                            U, S, Vh = torch.svd_lowrank(W, q=2 * r + 4, niter=6)
+                            # Truncate it to the part we want to store in the LoRA adapter.
+                            # Note: svd_lowrank actually returns V, so transpose it to get Vh.
+                            U = U[:, :r]
+                            S = S[:r]
+                            Vh = Vh[:, :r].T
+                            # Transfer it into the LoRA adapter components. Split the singular values
+                            # evenly between the two components to keep their norms balanced and avoid
+                            # potential issues with numerical stability.
+                            sqrt_S = torch.sqrt(S)
+                            lora_B = U @ torch.diag(sqrt_S)
+                            lora_A = torch.diag(sqrt_S) @ Vh
 
                     # Assign to adapters. The adapter name is "default", because that's
                     # what PEFT uses when no name is explicitly specified, as above.

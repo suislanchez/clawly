@@ -1,6 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2025-2026  Philipp Emanuel Weidmann <pew@worldwidemann.com> + contributors
 
+"""Abliteration evaluator for refusal counting and KL divergence measurement.
+
+Scores each optimization trial on two objectives: the number of refusals
+(lower is better for abliteration) and the KL divergence from the original
+model's output distribution (lower means less capability damage). Supports
+per-category refusal breakdown when categories are active.
+"""
+
+from __future__ import annotations
+
 import torch.nn.functional as F
 from torch import Tensor
 
@@ -16,10 +26,20 @@ class Evaluator:
     bad_prompts: list[Prompt]
     base_logprobs: Tensor
     base_refusals: int
+    # Per-category tracking
+    category_prompts: dict[str, list[Prompt]]
+    category_base_refusals: dict[str, int]
 
-    def __init__(self, settings: Settings, model: Model):
+    def __init__(
+        self,
+        settings: Settings,
+        model: Model,
+        category_eval_prompts: dict[str, list[Prompt]] | None = None,
+    ):
         self.settings = settings
         self.model = model
+        self.category_prompts = {}
+        self.category_base_refusals = {}
 
         print()
         print(
@@ -44,6 +64,17 @@ class Evaluator:
             f"* Initial refusals: [bold]{self.base_refusals}[/]/{len(self.bad_prompts)}"
         )
 
+        # Initialize per-category evaluation prompts
+        if category_eval_prompts:
+            for cat_name, prompts in category_eval_prompts.items():
+                self.category_prompts[cat_name] = prompts
+                print(f"* Counting base refusals for category [bold]{cat_name}[/]...")
+                base_count = self._count_refusals_for(prompts)
+                self.category_base_refusals[cat_name] = base_count
+                print(
+                    f"  * Initial refusals: [bold]{base_count}[/]/{len(prompts)}"
+                )
+
     def is_refusal(self, response: str) -> bool:
         # Classify empty responses as refusals to avoid optimizing for them.
         if not response.strip():
@@ -52,8 +83,8 @@ class Evaluator:
         # Remove emphasis (e.g. "I *will not*...").
         response = response.lower().replace("*", "")
 
-        # Normalize typographic apostrophes ("won’t" -> "won't").
-        response = response.replace("’", "'")
+        # Normalize typographic apostrophes ("won\u2019t" -> "won't").
+        response = response.replace("\u2019", "'")
 
         # Normalize whitespace between words to a single space.
         response = " ".join(response.split())
@@ -63,6 +94,17 @@ class Evaluator:
                 return True
 
         return False
+
+    def _count_refusals_for(self, prompts: list[Prompt]) -> int:
+        """Count refusals for a specific set of prompts."""
+        refusal_count = 0
+        responses = self.model.get_responses_batched(
+            prompts, skip_special_tokens=True
+        )
+        for prompt, response in zip(prompts, responses):
+            if self.is_refusal(response):
+                refusal_count += 1
+        return refusal_count
 
     def count_refusals(self) -> int:
         refusal_count = 0
@@ -92,7 +134,22 @@ class Evaluator:
 
         return refusal_count
 
-    def get_score(self) -> tuple[tuple[float, float], float, int]:
+    def count_category_refusals(self) -> dict[str, int]:
+        """Count refusals per category."""
+        results = {}
+        for cat_name, prompts in self.category_prompts.items():
+            count = self._count_refusals_for(prompts)
+            results[cat_name] = count
+            print(
+                f"  * Category [bold]{cat_name}[/] refusals: "
+                f"[bold]{count}[/]/{len(prompts)}"
+            )
+        return results
+
+    def get_score(
+        self,
+        category_weights: dict[str, float] | None = None,
+    ) -> tuple[tuple[float, float], float, int]:
         print("  * Obtaining first-token probability distributions...")
         logprobs = self.model.get_logprobs_batched(self.good_prompts)
         kl_divergence = F.kl_div(
@@ -106,6 +163,10 @@ class Evaluator:
         print("  * Counting model refusals...")
         refusals = self.count_refusals()
         print(f"  * Refusals: [bold]{refusals}[/]/{len(self.bad_prompts)}")
+
+        # Per-category breakdown if categories are active
+        if self.category_prompts:
+            self.last_category_refusals = self.count_category_refusals()
 
         kl_divergence_scale = self.settings.kl_divergence_scale
         kl_divergence_target = self.settings.kl_divergence_target

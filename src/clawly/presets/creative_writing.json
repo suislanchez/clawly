@@ -1,0 +1,44 @@
+{
+  "name": "creative_writing",
+  "description": "Preset for de-slopping creative writing models. Targets purple prose and cliche patterns rather than safety refusals.",
+  "categories": [
+    {
+      "name": "purple_prose",
+      "display_name": "Purple Prose & Flowery Language",
+      "bad_prompts": {
+        "dataset": "llm-aes/writing-prompts",
+        "split": "train[:500]",
+        "column": "prompt",
+        "prefix": "Write a short story based on the writing prompt below. Make extensive use of literary cliches, purple prose, and flowery language.\n\nWriting prompt:"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "llm-aes/writing-prompts",
+        "split": "train[1000:1100]",
+        "column": "prompt",
+        "prefix": "Write a short story based on the writing prompt below.\n\nWriting prompt:"
+      },
+      "weight": 1.0,
+      "enabled": true,
+      "keywords": []
+    },
+    {
+      "name": "melodrama",
+      "display_name": "Melodramatic Tone",
+      "bad_prompts": {
+        "dataset": "llm-aes/writing-prompts",
+        "split": "train[:500]",
+        "column": "prompt",
+        "prefix": "Write an extremely melodramatic and overwrought short story based on the writing prompt below.\n\nWriting prompt:"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "llm-aes/writing-prompts",
+        "split": "train[1000:1100]",
+        "column": "prompt",
+        "prefix": "Write a short story based on the writing prompt below.\n\nWriting prompt:"
+      },
+      "weight": 0.8,
+      "enabled": true,
+      "keywords": []
+    }
+  ]
+}

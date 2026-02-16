@@ -1,10 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2025-2026  Philipp Emanuel Weidmann <pew@worldwidemann.com> + contributors
 
+"""Configuration management via Pydantic Settings.
+
+All Clawly settings are defined in the :class:`Settings` class, which sources
+values from (in priority order): programmatic init, CLI arguments, environment
+variables (``CLAWLY_`` prefix), and a ``config.toml`` file.
+"""
+
 from enum import Enum
 from typing import Dict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     CliSettingsSource,
@@ -313,6 +320,50 @@ class Settings(BaseSettings):
         description="Dataset of prompts that tend to result in refusals (used for evaluating model performance).",
     )
 
+    # Category-based abliteration settings
+    category_preset: str | None = Field(
+        default=None,
+        description="Name of a built-in category preset to load (e.g., 'default').",
+    )
+
+    orthogonalize_categories: bool = Field(
+        default=False,
+        description="Whether to orthogonalize category refusal directions using Gram-Schmidt.",
+    )
+
+    category_lora_rank: int = Field(
+        default=8,
+        description="LoRA rank to use for multi-category SVD decomposition.",
+    )
+
+    @field_validator("n_trials")
+    @classmethod
+    def _validate_n_trials(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("n_trials must be at least 1")
+        return v
+
+    @field_validator("winsorization_quantile")
+    @classmethod
+    def _validate_winsorization(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("winsorization_quantile must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("category_lora_rank")
+    @classmethod
+    def _validate_lora_rank(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("category_lora_rank must be at least 1")
+        return v
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("model must not be empty")
+        return v.strip()
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -329,8 +380,9 @@ class Settings(BaseSettings):
                 cli_parse_args=True,
                 cli_implicit_flags=True,
                 cli_kebab_case=True,
+                cli_prog_name="clawly",
             ),
-            EnvSettingsSource(settings_cls, env_prefix="HERETIC_"),
+            EnvSettingsSource(settings_cls, env_prefix="CLAWLY_"),
             dotenv_settings,
             file_secret_settings,
             TomlConfigSettingsSource(settings_cls, toml_file="config.toml"),

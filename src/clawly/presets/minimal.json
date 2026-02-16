@@ -1,0 +1,49 @@
+{
+  "name": "minimal",
+  "description": "Minimal preset with just two categories: general harmful content and self-harm. Good for a quick selective abliteration where you only want to preserve self-harm refusals.",
+  "categories": [
+    {
+      "name": "harmful_general",
+      "display_name": "General Harmful Content",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 1.0,
+      "enabled": true,
+      "keywords": [
+        "weapon", "kill", "attack", "bomb", "gun", "shoot", "stab",
+        "murder", "assault", "violence", "drug", "substance", "narcotic",
+        "cocaine", "heroin", "sex", "sexual", "nude", "naked", "porn",
+        "hack", "exploit", "malware", "phishing", "steal", "fraud"
+      ]
+    },
+    {
+      "name": "self_harm",
+      "display_name": "Self-Harm & Suicide",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 0.0,
+      "enabled": true,
+      "keywords": [
+        "suicide", "self-harm", "self harm", "cutting", "overdose",
+        "kill myself", "end my life", "hurt myself", "suicidal",
+        "eating disorder", "anorexia", "bulimia", "starve"
+      ]
+    }
+  ]
+}

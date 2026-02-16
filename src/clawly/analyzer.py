@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2025-2026  Philipp Emanuel Weidmann <pew@worldwidemann.com> + contributors
 
+"""Residual geometry analysis and PaCMAP visualization (research feature).
+
+Computes per-layer statistics (cosine similarities, norms, silhouette scores)
+between good/bad/refusal residual centroids and generates PaCMAP dimensionality
+reduction plots. Requires ``pip install clawly[research]``.
+"""
+
 from pathlib import Path
 
 import torch
@@ -39,8 +46,8 @@ class Analyzer:
             print(
                 (
                     "[red]Research dependencies not found. Printing residual geometry requires "
-                    "installing Heretic with the optional research feature, i.e., "
-                    'using "pip install -U heretic-llm\\[research]".[/]'
+                    "installing Clawly with the optional research feature, i.e., "
+                    'using "pip install -U clawly\\[research]".[/]'
                 )
             )
             return
@@ -167,8 +174,8 @@ class Analyzer:
             print(
                 (
                     "[red]Research dependencies not found. Plotting residuals requires "
-                    "installing Heretic with the optional research feature, i.e., "
-                    'using "pip install -U heretic-llm\\[research]".[/]'
+                    "installing Clawly with the optional research feature, i.e., "
+                    'using "pip install -U clawly\\[research]".[/]'
                 )
             )
             return

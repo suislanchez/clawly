@@ -1,0 +1,91 @@
+{
+  "name": "default",
+  "description": "Default category preset with four common abliteration categories",
+  "categories": [
+    {
+      "name": "violence",
+      "display_name": "Violence & Weapons",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 1.0,
+      "enabled": true,
+      "keywords": [
+        "weapon", "kill", "attack", "bomb", "gun", "shoot", "stab",
+        "murder", "assault", "fight", "violence", "violent", "explode",
+        "explosive", "firearm", "ammunition", "knife", "sword", "combat",
+        "harm", "hurt", "injure", "destroy", "war", "terrorist", "terrorism"
+      ]
+    },
+    {
+      "name": "drugs",
+      "display_name": "Drugs & Controlled Substances",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 1.0,
+      "enabled": true,
+      "keywords": [
+        "drug", "substance", "narcotic", "cocaine", "heroin", "meth",
+        "marijuana", "cannabis", "opiate", "opioid", "fentanyl", "lsd",
+        "mdma", "ecstasy", "amphetamine", "overdose", "addiction",
+        "prescription", "pharmaceutical", "controlled substance"
+      ]
+    },
+    {
+      "name": "adult_content",
+      "display_name": "Adult & Explicit Content",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 1.0,
+      "enabled": true,
+      "keywords": [
+        "sex", "sexual", "nude", "naked", "porn", "erotic", "explicit",
+        "intimate", "adult content", "nsfw", "fetish", "obscene"
+      ]
+    },
+    {
+      "name": "self_harm",
+      "display_name": "Self-Harm & Suicide",
+      "bad_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "train[:400]",
+        "column": "text"
+      },
+      "bad_evaluation_prompts": {
+        "dataset": "mlabonne/harmful_behaviors",
+        "split": "test[:100]",
+        "column": "text"
+      },
+      "weight": 0.0,
+      "enabled": true,
+      "keywords": [
+        "suicide", "self-harm", "self harm", "cutting", "overdose",
+        "kill myself", "end my life", "hurt myself", "suicidal",
+        "eating disorder", "anorexia", "bulimia", "starve"
+      ]
+    }
+  ]
+}

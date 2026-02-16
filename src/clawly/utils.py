@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2025-2026  Philipp Emanuel Weidmann <pew@worldwidemann.com> + contributors
 
+"""Shared utility functions: prompt handling, formatting, memory management."""
+
 import gc
 import getpass
 import os
@@ -279,7 +281,7 @@ def get_readme_intro(
 
     return f"""# This is a decensored version of {
         model_link
-    }, made using [Heretic](https://github.com/p-e-w/heretic) v{version("heretic-llm")}
+    }, made using [Clawly](https://github.com/p-e-w/heretic) v{version("clawly")}
 
 ## Abliteration parameters
 
