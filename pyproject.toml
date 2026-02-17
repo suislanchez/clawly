@@ -69,6 +69,8 @@ web = [
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
     "ruff>=0.14.5",
     "ty>=0.0.5",
 ]
@@ -87,6 +89,10 @@ clawly-web = "clawly.web.app:main"
 [build-system]
 requires = ["uv_build>=0.8.11,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.uv.build-backend]
 module-name = "clawly"
